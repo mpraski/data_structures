@@ -37,7 +37,7 @@ public:
         max = value;
       }
 
-      if constexpr (UB > 1) {
+      if constexpr (HALF_BITS) {
         T lo{low(value)};
         T hi{high(value)};
 
