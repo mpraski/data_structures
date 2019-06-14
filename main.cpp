@@ -1,6 +1,7 @@
 #include <iostream>
 #include "b_tree/b_tree.h"
 #include "veb_tree/veb_tree.h"
+#include "bloom_filter/bloom_filter.h"
 
 #include <vector>
 #include <random>
@@ -10,7 +11,13 @@
 
 int main() {
   std::cout << "Hello, World!" << std::endl;
-  b_tree<int, 5> tree;
+  bloom_filter<std::string, std::hash<std::string>> filter;
+  filter.add("lel");
+
+  std::cout << "contains lel: " << filter.has("lel") << std::endl;
+  std::cout << "contains lul: " << filter.has("lul") << std::endl;
+
+  /*b_tree<int, 5> tree;
   tree.insert(10);
   tree.insert(9);
   tree.insert(8);
@@ -54,6 +61,6 @@ int main() {
             << tot2
             << " us" << std::endl;
 
-  std::cout << "veb to sort ratio: " << tot / tot2 << std::endl;
+  std::cout << "veb to sort ratio: " << tot / tot2 << std::endl;*/
   return 0;
 }
