@@ -15,17 +15,13 @@
 #include <bitset>
 #include <cstring>
 
-template<class T, class... Fs>
+#include "hash/string_murmur.h"
+#include "hash/string_fnv.h"
+
+template<class... Fs>
 class bloom_filter {
-    template<typename B, typename ...As>
-    using are_same = std::conjunction<std::is_same<B, As>...>;
-
-    template<std::size_t N, typename... As>
-    using nth_type = typename std::tuple_element<N, std::tuple<As...>>::type;
-
     static_assert(sizeof...(Fs), "You must supply at least one hash function");
     static_assert((std::is_default_constructible_v<Fs> && ...), "Each hash function must be default constructible");
-    static_assert(are_same<nth_type<0, Fs...>, Fs...>::value, "Each hash function must be of the same type");
 
 public:
     explicit bloom_filter(std::size_t size = 1u << 16u)
@@ -77,5 +73,6 @@ private:
     }
 };
 
+using string_bloom = bloom_filter<string_murmur, string_fnv>;
 
 #endif //DATA_STRUCTURES_BLOOM_FILTER_H

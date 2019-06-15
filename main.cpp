@@ -11,7 +11,7 @@
 
 int main() {
   std::cout << "Hello, World!" << std::endl;
-  bloom_filter<std::string, std::hash<std::string>> filter;
+  string_bloom filter;
   filter.add("lel");
 
   std::cout << "contains lel: " << filter.has("lel") << std::endl;
