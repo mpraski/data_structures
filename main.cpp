@@ -13,9 +13,11 @@ int main() {
   std::cout << "Hello, World!" << std::endl;
   string_bloom filter;
   filter.add("lel");
+  filter.add("lul");
+  filter.remove("lel");
 
-  std::cout << "contains lel: " << filter.has("lel") << std::endl;
-  std::cout << "contains lul: " << filter.has("lul") << std::endl;
+  std::cout << "contains lel: " << filter.maybe_has("lel") << std::endl;
+  std::cout << "contains lul: " << filter.maybe_has("lul") << std::endl;
 
   /*b_tree<int, 5> tree;
   tree.insert(10);

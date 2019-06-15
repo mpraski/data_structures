@@ -7,7 +7,7 @@
 // 1. We can read a 4-byte value from any address without crashing
 // 2. sizeof(int) == 4
 
-// And it has a few limitations -
+// And it maybe_has a few limitations -
 
 // 1. It will not work incrementally.
 // 2. It will not produce the same results on little-endian and big-endian
