@@ -2,6 +2,7 @@
 #include "b_tree/b_tree.h"
 #include "veb_tree/veb_tree.h"
 #include "bloom_filter/bloom_filter.h"
+#include "bloomier_filter/immutable_bloomier_filter.h"
 
 #include <vector>
 #include <random>
@@ -18,6 +19,14 @@ int main() {
 
   std::cout << "contains lel: " << filter.maybe_has("lel") << std::endl;
   std::cout << "contains lul: " << filter.maybe_has("lul") << std::endl;
+
+  immutable_bloomier_filter<int, int, 10, 10> ibf{{
+                                                      {1, 2},
+                                                      {2, 4}
+                                                  }};
+
+  std::cout << "found for 1: " << ibf.get(1) << std::endl;
+
 
   /*b_tree<int, 5> tree;
   tree.insert(10);
