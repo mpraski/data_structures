@@ -7,7 +7,7 @@
 
 #include <cstddef>
 #include <array>
-#include "../bloom_filter/hash/vendor/MurmurHash3.h"
+#include "../vendor/MurmurHash3.h"
 
 template<class T, std::size_t M, std::size_t K, std::size_t Q>
 class hasher {

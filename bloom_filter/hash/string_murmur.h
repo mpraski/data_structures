@@ -6,7 +6,7 @@
 #define DATA_STRUCTURES_STRING_MURMUR_H
 
 #include <string>
-#include "vendor/MurmurHash2.h"
+#include "../../vendor/MurmurHash2.h"
 
 class string_murmur {
 public:

@@ -3,6 +3,7 @@
 #include "veb_tree/veb_tree.h"
 #include "bloom_filter/bloom_filter.h"
 #include "bloomier_filter/immutable_bloomier_filter.h"
+#include "rsq_filter/rsq_filter.h"
 
 #include <vector>
 #include <random>
@@ -27,6 +28,10 @@ int main() {
 
   std::cout << "found for 1: " << ibf.get(1) << std::endl;
 
+  rsq_filter<int> rsqf;
+  std::cout << "contains 1: " << rsqf.may_contain(1) << std::endl;
+  rsqf.insert(1);
+  std::cout << "contains 1: " << rsqf.may_contain(1) << std::endl;
 
   /*b_tree<int, 5> tree;
   tree.insert(10);
