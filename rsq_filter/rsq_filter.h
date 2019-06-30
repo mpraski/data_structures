@@ -45,19 +45,21 @@ public:
       auto idx{block_idx(quotient)};
       auto rem{block_rem(quotient)};
 
-      auto &block{get_block(idx)};
+      const auto &block{get_block(idx)};
       if (!is_set(block.occupieds, rem)) {
         return false;
       }
 
-      auto t{rank(block.occupieds, rem)};
-      auto l{select(block.runends, t)};
+      auto l{rank_select(block, rem)};
+      if (!l) {
+        return block.remainders[rem] == remainder;
+      }
+
       do {
-        if (block.remainders[l] == remainder) {
+        if (block.remainders[l--] == remainder) {
           return true;
         }
-        l--;
-      } while (l > rem && !is_set(block.runends, l));
+      } while (l >= rem && !is_set(block.runends, l));
 
       return false;
     }
@@ -71,13 +73,12 @@ public:
 
       auto &block{get_block(idx)};
 
-      auto r{rank(block.occupieds, rem)};
-      auto s{select(block.runends, r)};
-      if (rem > s) {
+      auto s{rank_select(block, rem)};
+      if (!block.occupieds || rem > s) {
         block.remainders[rem] = remainder;
         set(block.runends, rem);
       } else {
-        if (s < 63) s++;
+        s++;
         auto n{first_unused_slot(block, s)};
         while (n > s) {
           block.remainders[n] = block.remainders[n - 1];
@@ -104,15 +105,15 @@ private:
     }
 
     inline bool is_set(uint64_t vec, unsigned i) const noexcept {
-      return vec & (1ul << i);
+      return vec & bit(i);
     }
 
     inline void set(uint64_t &vec, unsigned i) const noexcept {
-      vec |= 1ul << i;
+      vec |= bit(i);
     }
 
     inline void clear(uint64_t &vec, unsigned i) const noexcept {
-      vec &= ~(1ul << i);
+      vec &= ~bit(i);
     }
 
     inline void copy_bit(uint64_t &vec, unsigned a, unsigned b) const noexcept {
@@ -135,6 +136,13 @@ private:
       return __builtin_clzl(_pdep_u64(bit(i), vec));
     }
 
+    inline unsigned rank_select(const rsq_filter_block &block, unsigned i) const noexcept {
+      if (auto r{rank(block.occupieds, i)}; r) {
+        return select(block.runends, r);
+      }
+      return 0u;
+    }
+
     inline auto &get_block(uint64_t quotient) {
       if (auto it{blocks.find(quotient)}; it == blocks.end()) {
         blocks.emplace(quotient, rsq_filter_block{});
@@ -143,13 +151,11 @@ private:
     }
 
     unsigned first_unused_slot(const rsq_filter_block &block, unsigned i) const noexcept {
-      auto r{rank(block.occupieds, i)};
-      auto s{select(block.runends, r)};
+      auto s{rank_select(block, i)};
 
       while (i <= s) {
         i = s + 1;
-        r = rank(block.occupieds, i);
-        s = select(block.runends, r);
+        s = rank_select(block, i);
       }
 
       return i;
