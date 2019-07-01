@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <ctime>
 #include <chrono>
+#include <algorithm>
 
 #if defined(__BMI2__)
 
@@ -20,10 +21,10 @@
 
 #endif
 
-#include "rsq_filter_block.h"
 #include "../vendor/MurmurHash3.h"
 
 #define bit(n) (1ul << (n))
+#define REMAINDERS_LEN 64u
 
 template<class T>
 class rsq_filter {
@@ -92,10 +93,18 @@ public:
         set(block.runends, s);
       }
 
+      set(block.offset, std::max(s - rem, 0ul));
       set(block.occupieds, rem);
     }
 
 private:
+    struct rsq_filter_block {
+        uint8_t offset;
+        uint64_t occupieds;
+        uint64_t runends;
+        uint64_t remainders[REMAINDERS_LEN];
+    };
+
     std::unordered_map<uint64_t, rsq_filter_block> blocks;
     std::array<uint64_t, 2> hashes;
     std::size_t seed;
@@ -109,6 +118,10 @@ private:
     }
 
     inline void set(uint64_t &vec, unsigned i) const noexcept {
+      vec |= bit(i);
+    }
+
+    inline void set(uint8_t &vec, unsigned i) const noexcept {
       vec |= bit(i);
     }
 
@@ -129,11 +142,11 @@ private:
     }
 
     inline unsigned rank(uint64_t vec, unsigned i) const noexcept {
-      return __builtin_popcountl(vec & (bit(i) - 1ul));
+      return __builtin_popcountll(vec & (bit(i) - 1ul));
     }
 
     inline unsigned select(uint64_t vec, unsigned i) const noexcept {
-      return __builtin_clzl(_pdep_u64(bit(i), vec));
+      return __builtin_clzll(_pdep_u64(bit(i), vec));
     }
 
     inline unsigned rank_select(const rsq_filter_block &block, unsigned i) const noexcept {
