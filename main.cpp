@@ -12,7 +12,7 @@
 #include <chrono>
 
 int main() {
-  std::cout << "Hello, World!" << std::endl;
+  /*std::cout << "Hello, World!" << std::endl;
   string_bloom filter;
   filter.add("lel");
   filter.add("lul");
@@ -26,7 +26,7 @@ int main() {
                                                       {2, 4}
                                                   }};
 
-  std::cout << "found for 1: " << ibf.get(1) << std::endl;
+  std::cout << "found for 1: " << ibf.get(1) << std::endl;*/
 
   rsq_filter<int> rsqf;
   std::cout << "contains 1: " << rsqf.may_contain(1) << std::endl;

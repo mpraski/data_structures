@@ -13,6 +13,7 @@
 #include <ctime>
 #include <chrono>
 #include <algorithm>
+#include <numeric>
 
 #if defined(__BMI2__)
 
@@ -24,17 +25,53 @@
 #include "../vendor/MurmurHash3.h"
 
 #define bit(n) (1ul << (n))
-#define REMAINDERS_LEN 64u
+#define DEFAULTS_SLOTS (1u << 8u)
+#define DEFAULT_BLOCK_SLOTS 64u
 
-template<class T>
+constexpr bool is_prime(size_t n) noexcept {
+  if (n == 2u || n == 3u)
+    return true;
+  if (n == 1u || n % 2u == 0u)
+    return false;
+  for (size_t i{3u}; i * i <= n; i += 2u)
+    if (n % i == 0u)
+      return false;
+  return true;
+}
+
+constexpr size_t next_prime(size_t n) noexcept {
+  if (!n)
+    n = 3;
+  else if (n % 2 == 0)
+    n++;
+  for (; !is_prime(n); n += 2);
+  return n;
+}
+
+template<class T, size_t SLOTS = DEFAULTS_SLOTS, size_t BLOCK_SLOTS = DEFAULT_BLOCK_SLOTS>
 class rsq_filter {
+    const constexpr static auto BLOCKS = next_prime(SLOTS * SLOTS);
+    const constexpr static auto MAGIC_NUMBER = 0xAAAAAAAA;
+
+    static_assert(BLOCKS < std::numeric_limits<uint32_t>::max());
 public:
-    rsq_filter() : blocks{}, hashes{}, seed{} {
+    rsq_filter()
+        : blocks{(rsqf_block *) calloc(BLOCKS, sizeof(rsqf_block))},
+          metadata{},
+          hashes{},
+          free_list_pointer{},
+          seed{} {
+      // Initialize free list
+      for (uint32_t i{0u}; i < BLOCKS - 1; ++i) {
+        metadata[i].next_free = i + 1;
+        metadata[i + 1].prev_free = i;
+      }
+
       auto engine_seed{std::chrono::system_clock::now().time_since_epoch().count()};
       std::mt19937 rng(engine_seed);
-      std::uniform_int_distribution<std::size_t> random(
-          std::numeric_limits<std::size_t>::min(),
-          std::numeric_limits<std::size_t>::max()
+      std::uniform_int_distribution<uint32_t> random(
+          std::numeric_limits<uint32_t>::min(),
+          std::numeric_limits<uint32_t>::max()
       );
       seed = random(rng);
     }
@@ -46,21 +83,21 @@ public:
       auto idx{block_idx(quotient)};
       auto rem{block_rem(quotient)};
 
-      const auto &block{get_block(idx)};
-      if (!is_set(block.occupieds, rem)) {
+      const auto *block{block_at(idx)};
+      if (!is_set(block->occupieds, rem)) {
         return false;
       }
 
-      auto l{rank_select(block, rem)};
+      auto l{rank_select(*block, rem)};
       if (!l) {
-        return block.remainders[rem] == remainder;
+        return block->remainders[rem] == remainder;
       }
 
       do {
-        if (block.remainders[l--] == remainder) {
+        if (block->remainders[l--] == remainder) {
           return true;
         }
-      } while (l >= rem && !is_set(block.runends, l));
+      } while (l >= rem && !is_set(block->runends, l));
 
       return false;
     }
@@ -72,42 +109,50 @@ public:
       auto idx{block_idx(quotient)};
       auto rem{block_rem(quotient)};
 
-      auto &block{get_block(idx)};
+      auto *block{block_at(idx)};
 
-      auto s{rank_select(block, rem)};
-      if (!block.occupieds || rem > s) {
-        block.remainders[rem] = remainder;
-        set(block.runends, rem);
+      auto s{rank_select(*block, rem)};
+      if (!block->occupieds || rem > s) {
+        block->remainders[rem] = remainder;
+        set(block->runends, rem);
       } else {
         s++;
-        auto n{first_unused_slot(block, s)};
+        auto n{first_unused_slot(*block, s)};
         while (n > s) {
-          block.remainders[n] = block.remainders[n - 1];
-          copy_bit(block.runends, n, n - 1);
+          block->remainders[n] = block->remainders[n - 1];
+          copy_bit(block->runends, n, n - 1);
           n--;
         }
-        block.remainders[s] = remainder;
-        if (is_set(block.occupieds, rem)) {
-          clear(block.runends, s - 1);
+        block->remainders[s] = remainder;
+        if (is_set(block->occupieds, rem)) {
+          clear(block->runends, s - 1);
         }
-        set(block.runends, s);
+        set(block->runends, s);
       }
 
-      set(block.offset, std::max(s - rem, 0ul));
-      set(block.occupieds, rem);
+      set(block->occupieds, rem);
     }
 
 private:
-    struct rsq_filter_block {
+    struct rsqf_block {
         uint8_t offset;
         uint64_t occupieds;
         uint64_t runends;
-        uint64_t remainders[REMAINDERS_LEN];
+        uint64_t remainders[BLOCK_SLOTS];
     };
 
-    std::unordered_map<uint64_t, rsq_filter_block> blocks;
+    struct rsqf_block_metadata {
+        uint32_t prev_free;
+        uint32_t next_free;
+        uint32_t next_logical;
+        uint32_t hash;
+    } __attribute__((packed));
+
+    std::unique_ptr<rsqf_block> blocks;
+    std::array<rsqf_block_metadata, BLOCKS> metadata;
     std::array<uint64_t, 2> hashes;
-    std::size_t seed;
+    uint32_t free_list_pointer;
+    uint32_t seed;
 
     inline void hash(const T &key) {
       MurmurHash3_x64_128(std::addressof(key), sizeof(T), seed, hashes.data());
@@ -133,14 +178,6 @@ private:
       (vec & bit(b)) ? set(vec, a) : clear(vec, a);
     }
 
-    inline uint64_t block_idx(uint64_t quotient) const noexcept {
-      return quotient / 64ul;
-    }
-
-    inline uint64_t block_rem(uint64_t quotient) const noexcept {
-      return quotient % 64ul;
-    }
-
     inline unsigned rank(uint64_t vec, unsigned i) const noexcept {
       return __builtin_popcountll(vec & (bit(i) - 1ul));
     }
@@ -149,21 +186,14 @@ private:
       return __builtin_clzll(_pdep_u64(bit(i), vec));
     }
 
-    inline unsigned rank_select(const rsq_filter_block &block, unsigned i) const noexcept {
+    inline unsigned rank_select(const rsqf_block &block, unsigned i) const noexcept {
       if (auto r{rank(block.occupieds, i)}; r) {
         return select(block.runends, r);
       }
       return 0u;
     }
 
-    inline auto &get_block(uint64_t quotient) {
-      if (auto it{blocks.find(quotient)}; it == blocks.end()) {
-        blocks.emplace(quotient, rsq_filter_block{});
-      }
-      return blocks[quotient];
-    }
-
-    unsigned first_unused_slot(const rsq_filter_block &block, unsigned i) const noexcept {
+    unsigned first_unused_slot(const rsqf_block &block, unsigned i) const noexcept {
       auto s{rank_select(block, i)};
 
       while (i <= s) {
@@ -172,6 +202,62 @@ private:
       }
 
       return i;
+    }
+
+    inline uint32_t low(uint64_t val) const noexcept {
+      return (bit(32ul) - 1ul) & val;
+    }
+
+    inline uint32_t high(uint64_t val) const noexcept {
+      return val >> 32ul;
+    }
+
+    inline uint8_t block_rem(uint64_t quotient) const noexcept {
+      return quotient % BLOCK_SLOTS;
+    }
+
+    auto block_idx(uint64_t quotient) {
+      quotient /= BLOCK_SLOTS;
+      auto lo{low(quotient) % BLOCKS};
+      auto hi{high(quotient)};
+      auto &meta{metadata[lo]};
+      uint32_t collisions{1u};
+
+      while (meta.hash && meta.hash != hi) {
+        lo = lo + 2 * ++collisions - 1;
+        if (lo >= BLOCKS) {
+          lo -= BLOCKS;
+        }
+      }
+
+      if (!meta.hash) {
+        meta.hash = hi;
+        if (lo == free_list_pointer) {
+          increment_free_list_pointer();
+        } else {
+          metadata[meta.prev_free].next_free = meta.next_free;
+          metadata[meta.next_free].prev_free = meta.prev_free;
+        }
+      }
+
+      return lo;
+    }
+
+    auto next_block_idx(uint32_t block_idx) {
+      if (!metadata[block_idx].next_logical) {
+        metadata[block_idx].next_logical = free_list_pointer;
+        metadata[free_list_pointer].hash = MAGIC_NUMBER;
+        increment_free_list_pointer();
+      }
+      return metadata[block_idx].next_logical;
+    }
+
+    inline auto *block_at(uint32_t block_idx) {
+      return blocks.get() + block_idx;
+    }
+
+    inline void increment_free_list_pointer() {
+      free_list_pointer = metadata[free_list_pointer].next_free;
     }
 };
 
